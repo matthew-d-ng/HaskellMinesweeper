@@ -1,6 +1,6 @@
 module Mines
-    ( makeMinefield
-    , Minefield
+    ( Minefield
+    , makeMinefield
     , displayMinefield
     , gameWon
     , gameLost
@@ -8,6 +8,7 @@ module Mines
     , flagTile
     , potentialTile
     , tileAt
+    , setAllVisible
     ) where
 
 import System.Random
@@ -25,18 +26,18 @@ data Tile = Tile
     , coords :: Coords
     } deriving Eq
 
--- Game settings
-mHeight = 10
-mWidth = 10
-numMines = 20
+-- GAME SETTINGS
+mHeight = 20
+mWidth = 20
+numMines = 50
 
+-- DEBUGGING UTILS
 testMines = [
     (0, 1), (4, 6), (8, 2), (9, 8), (2, 4), 
     (6, 6), (1, 3), (9, 9), (7, 0), (2, 2),
     (1, 2), (4, 2), (9, 0), (6, 1), (8, 4)
     ]
 
--- debugging
 setAllVisible :: Minefield -> Minefield
 setAllVisible m = setTilesVisible m (concat m)
 
@@ -44,41 +45,47 @@ setTilesVisible :: Minefield -> [Tile] -> Minefield
 setTilesVisible m []     = m
 setTilesVisible m (t:ts) = setTilesVisible (revealTile m t) ts
 
--- Initialise Minefield
+-- INITIALISE MINEFIELD
+-- Create 2D list of empty tiles
 emptyMinefield :: Int -> Int -> Minefield
-emptyMinefield h w
-    | h > 0     = (emptyMinefield (h-1) w) ++ [createEmptyRow (h-1) w]
-    | otherwise = []
+emptyMinefield 0 w = []
+emptyMinefield h w = (emptyMinefield (h-1) w) ++ [createEmptyRow (h-1) w]
 
+-- Create 1D list of empty tiles
 createEmptyRow :: Int -> Int -> [Tile]
-createEmptyRow i n 
-    | n > 0 = 
-        let t = Tile{status = Unknown, square = Empty, coords = (i, n-1)}
-        in (createEmptyRow i (n-1)) ++ [t]
-    | otherwise = []
+createEmptyRow i 0 = [] 
+createEmptyRow i n =
+    let t = Tile{status = Unknown, square = Empty, coords = (i, n-1)}
+    in (createEmptyRow i (n-1)) ++ [t]
 
-makeMinefield :: Minefield
-makeMinefield =
+-- Create 2D list of tiles with randomly placed mines
+makeMinefield :: IO Minefield
+makeMinefield = do
     let m = emptyMinefield mHeight mWidth
-        c = testMines --generateMines mHeight mWidth numMines g
-    in fillMines m c
+    c <- generateMines mHeight mWidth numMines
+    return $ fillMines m c
 
---generateMines :: RandomGen g => Int -> Int -> Int -> g -> [Coords]
---generateMines h w n g = do
---    x <- randomR (0, h-1)
---    y <- randomR (0, w-1)
---    rest <- generateMines h w n-1
---    (x, y):rest
+-- Generate list of mines
+generateMines :: Int -> Int -> Int -> IO([Coords])
+generateMines h w 0 = return []
+generateMines h w n = do
+    x <- randomRIO (0, h-1)
+    y <- randomRIO (0, w-1)
+    rest <- generateMines h w (n-1)
+    return $ (x, y):rest
 
+-- Fill minefield with list of Mines
 fillMines :: Minefield -> [Coords] -> Minefield
 fillMines m []     = m
 fillMines m (c:cs) = fillMines (addMine m c) cs
 
+-- Add mine to minefield
 addMine :: Minefield -> Coords -> Minefield
 addMine m coord = 
     let t = Tile{status = Unknown, square = Mine, coords = coord}
     in setTileAt m coord t
 
+-- GAME RULES
 -- Game is won if all tiles without mines are visible
 gameWon :: Minefield -> Bool
 gameWon m = all rowDone m
@@ -98,7 +105,7 @@ rowLost row = any tileLost row
 tileLost :: Tile -> Bool
 tileLost t = (isVisible t) && (isMine t)
 
--- String representation of Minefield
+-- SHOW MINEFIELD
 displayMinefield :: Minefield -> String
 displayMinefield m = displayGrid m m
 

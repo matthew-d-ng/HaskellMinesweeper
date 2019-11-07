@@ -1,17 +1,28 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Main where
 
+import qualified Web.Scotty as S
+import qualified Text.Blaze.Html5 as H
+import qualified Text.Blaze.Html5.Attributes as A
+import Text.Blaze.Html.Renderer.Text
+
 import Mines
-import Web.Scotty
 
 main :: IO ()
-main = scotty 3000 $ do
-    get "/" $ do
-        html "<head><title>balkan simulator</title></head> <body><h1>Minesweeper</h1></body>"
+--main = S.scotty 3000 $ do
+--    S.get "/" $ do
+--        homepage
+main = startGame
+
+homepage = S.html . renderHtml  $ do
+    H.head $ do
+        H.title "Balkan Simulator"
+    H.body $ do 
+        H.h1 "Minesweeper"
 
 startGame :: IO ()
 startGame = do
-    let m = makeMinefield
+    m <- makeMinefield
     makeMove m
 
 makeMove :: Minefield -> IO ()
