@@ -1,14 +1,19 @@
+{-# LANGUAGE FlexibleInstances #-}
+
 module Mines
     ( Minefield
+    , Tile (status, square, coords)
+    , Status (Visible, Unknown, Flagged, Potential)
+    , displayTile
     , makeMinefield
-    , displayMinefield
     , gameWon
     , gameLost
+    , adjacentMines
     , uncoverTile
     , flagTile
     , potentialTile
     , tileAt
-    , setAllVisible
+    , setAllVisible -- debugging only
     ) where
 
 import System.Random
@@ -26,6 +31,7 @@ data Tile = Tile
     , coords :: Coords
     } deriving Eq
 
+
 -- GAME SETTINGS
 mHeight = 20
 mWidth = 20
@@ -38,6 +44,7 @@ testMines = [
     (1, 2), (4, 2), (9, 0), (6, 1), (8, 4)
     ]
 
+-- Make every tile visible
 setAllVisible :: Minefield -> Minefield
 setAllVisible m = setTilesVisible m (concat m)
 
@@ -45,67 +52,10 @@ setTilesVisible :: Minefield -> [Tile] -> Minefield
 setTilesVisible m []     = m
 setTilesVisible m (t:ts) = setTilesVisible (revealTile m t) ts
 
--- INITIALISE MINEFIELD
--- Create 2D list of empty tiles
-emptyMinefield :: Int -> Int -> Minefield
-emptyMinefield 0 w = []
-emptyMinefield h w = (emptyMinefield (h-1) w) ++ [createEmptyRow (h-1) w]
-
--- Create 1D list of empty tiles
-createEmptyRow :: Int -> Int -> [Tile]
-createEmptyRow i 0 = [] 
-createEmptyRow i n =
-    let t = Tile{status = Unknown, square = Empty, coords = (i, n-1)}
-    in (createEmptyRow i (n-1)) ++ [t]
-
--- Create 2D list of tiles with randomly placed mines
-makeMinefield :: IO Minefield
-makeMinefield = do
-    let m = emptyMinefield mHeight mWidth
-    c <- generateMines mHeight mWidth numMines
-    return $ fillMines m c
-
--- Generate list of mines
-generateMines :: Int -> Int -> Int -> IO([Coords])
-generateMines h w 0 = return []
-generateMines h w n = do
-    x <- randomRIO (0, h-1)
-    y <- randomRIO (0, w-1)
-    rest <- generateMines h w (n-1)
-    return $ (x, y):rest
-
--- Fill minefield with list of Mines
-fillMines :: Minefield -> [Coords] -> Minefield
-fillMines m []     = m
-fillMines m (c:cs) = fillMines (addMine m c) cs
-
--- Add mine to minefield
-addMine :: Minefield -> Coords -> Minefield
-addMine m coord = 
-    let t = Tile{status = Unknown, square = Mine, coords = coord}
-    in setTileAt m coord t
-
--- GAME RULES
--- Game is won if all tiles without mines are visible
-gameWon :: Minefield -> Bool
-gameWon m = all rowDone m
-
-rowDone :: [Tile] -> Bool
-rowDone row = 
-    let x = filter (\t -> not $ (isVisible t) || (isMine t)) row
-    in length x == 0
-
--- We've lost if we step on a mine
-gameLost :: Minefield -> Bool
-gameLost m = any rowLost m
-
-rowLost :: [Tile] -> Bool
-rowLost row = any tileLost row
-
-tileLost :: Tile -> Bool
-tileLost t = (isVisible t) && (isMine t)
-
 -- SHOW MINEFIELD
+instance {-# OVERLAPS #-} Show Minefield where
+    show = displayMinefield
+
 displayMinefield :: Minefield -> String
 displayMinefield m = displayGrid m m
 
@@ -131,10 +81,74 @@ displayTile m t = case square t of
         0 -> " - "
         n -> " " ++ [intToDigit n] ++ " "
 
--- Choose a location
+
+-- INITIALISE MINEFIELD
+-- Create 2D list of tiles with randomly placed mines
+makeMinefield :: Int -> Int -> IO Minefield
+makeMinefield h w = do
+    let m = emptyMinefield h w
+    c <- generateMines h w numMines
+    return $ fillMines m c
+
+-- Create 2D list of empty tiles
+emptyMinefield :: Int -> Int -> Minefield
+emptyMinefield 0 w = []
+emptyMinefield h w = (emptyMinefield (h-1) w) ++ [createEmptyRow (h-1) w]
+
+-- Create 1D list of empty tiles
+createEmptyRow :: Int -> Int -> [Tile]
+createEmptyRow i 0 = [] 
+createEmptyRow i n =
+    let t = Tile{status = Unknown, square = Empty, coords = (i, n-1)}
+    in (createEmptyRow i (n-1)) ++ [t]
+
+-- Generate list of mines
+generateMines :: Int -> Int -> Int -> IO([Coords])
+generateMines h w 0 = return []
+generateMines h w n = do
+    x <- randomRIO (0, h-1)
+    y <- randomRIO (0, w-1)
+    rest <- generateMines h w (n-1)
+    return $ (x, y):rest
+
+-- Fill minefield with list of Mines
+fillMines :: Minefield -> [Coords] -> Minefield
+fillMines m []     = m
+fillMines m (c:cs) = fillMines (addMine m c) cs
+
+-- Add mine to minefield
+addMine :: Minefield -> Coords -> Minefield
+addMine m coord = 
+    let t = Tile{status = Unknown, square = Mine, coords = coord}
+    in setTileAt m coord t
+
+
+-- GAME RULES
+-- Game is won if all tiles without mines are visible
+gameWon :: Minefield -> Bool
+gameWon m = all rowDone m
+
+rowDone :: [Tile] -> Bool
+rowDone row = 
+    let x = filter (\t -> not $ (isVisible t) || (isMine t)) row
+    in length x == 0
+
+-- We've lost if we step on a mine
+gameLost :: Minefield -> Bool
+gameLost m = any rowLost m
+
+rowLost :: [Tile] -> Bool
+rowLost row = any tileLost row
+
+tileLost :: Tile -> Bool
+tileLost t = (isVisible t) && (isMine t)
+
+
+-- MAKE TILE VISIBLE AND CLEAR AREA AROUND IT - CALLABLE
 uncoverTile :: Minefield -> Tile -> Minefield
 uncoverTile m t = clear $ revealTile m t
 
+-- keep clearing until convergence
 clear :: Minefield -> Minefield
 clear m
     | m == m'   = m'
@@ -152,23 +166,27 @@ clearTiles m (t:ts) =
     let m' = revealTile m t
     in clearTiles m' ts
 
+-- Is tile is adjacent to a visible tile not touching any mines?
 clearedSpace :: Minefield -> Tile -> Bool
 clearedSpace m t = 
     let visAdj = filter isVisible (adjacents m t)
     in any (==0) (map (adjacentMines m) visAdj)
 
--- Change status of Tile
+
+-- MAKE TILE VISIBLE - NOT CALLABLE
 revealTile :: Minefield -> Tile -> Minefield
 revealTile m t = setTile m t t{status=Visible}
 
--- Change status of Tile - Callable by user
+-- MAKE TILE FLAGGED - CALLABLE
 flagTile :: Minefield -> Tile -> Minefield
 flagTile m t = setTile m t t{status=Flagged}
 
+-- MARK TILE AS POTENTIALLY A MINE - CALLABLE
 potentialTile :: Minefield -> Tile -> Minefield
 potentialTile m t = setTile m t t{status=Potential}
 
--- Set new tile at location
+
+-- SET TILE AT LOCATION
 setTile :: Minefield -> Tile -> Tile -> Minefield
 setTile m t1 t2 = setTileAt m (coords t1) t2
 
@@ -183,7 +201,7 @@ setTileRow [] _ _   = []
 setTileRow (x:xs) t 0 = t:xs
 setTileRow (x:xs) t j = x:(setTileRow xs t (j-1))
 
--- Util
+-- UTILITY FUNCTIONS
 inRange :: Minefield -> Coords -> Bool
 inRange m (i, j) = 
     let len = length m 
@@ -194,6 +212,7 @@ inRange m (i, j) =
 --    | inRange m (i, j) = Just $ m !! i !! j
 --    | otherwise        = Nothing
 
+-- Unsafe
 tileAt :: Minefield -> Coords -> Tile
 tileAt m (i, j) = m !! i !! j
 
