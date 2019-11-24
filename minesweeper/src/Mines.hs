@@ -145,10 +145,23 @@ tileLost t = (isVisible t) && (isMine t)
 
 
 -- MAKE TILE VISIBLE AND CLEAR AREA AROUND IT - CALLABLE
-uncoverTile :: Minefield -> Tile -> Minefield
-uncoverTile m t = clear $ revealTile m t
+uncoverTile :: Minefield -> Coords -> Minefield
+uncoverTile m t = clear $ revealTile m (tileAt m t)
+
+-- MAKE TILE FLAGGED - CALLABLE
+flagTile :: Minefield -> Coords -> Minefield
+flagTile m t = let tile = tileAt m t
+    in setTileAt m t tile{status=Flagged}
+
+-- MARK TILE AS POTENTIALLY A MINE - CALLABLE
+potentialTile :: Minefield -> Coords -> Minefield
+potentialTile m t = let tile = tileAt m t
+    in setTileAt m t tile{status=Potential}
+
 
 -- keep clearing until convergence
+-- recursively makes visible empty spaces 
+-- which are adjacent to other visible empty squares
 clear :: Minefield -> Minefield
 clear m
     | m == m'   = m'
@@ -176,15 +189,6 @@ clearedSpace m t =
 -- MAKE TILE VISIBLE - NOT CALLABLE
 revealTile :: Minefield -> Tile -> Minefield
 revealTile m t = setTile m t t{status=Visible}
-
--- MAKE TILE FLAGGED - CALLABLE
-flagTile :: Minefield -> Tile -> Minefield
-flagTile m t = setTile m t t{status=Flagged}
-
--- MARK TILE AS POTENTIALLY A MINE - CALLABLE
-potentialTile :: Minefield -> Tile -> Minefield
-potentialTile m t = setTile m t t{status=Potential}
-
 
 -- SET TILE AT LOCATION
 setTile :: Minefield -> Tile -> Tile -> Minefield

@@ -16,7 +16,7 @@ data Modes = Mine | Flag | Unsure deriving Show
 main :: IO ()
 main = do
     m <- makeMinefield mHeight mWidth
-    startGUI defaultConfig (setup $ setAllVisible m)
+    startGUI defaultConfig (setup m)
 
 setup :: Minefield -> Window -> UI ()
 setup m window = do
@@ -28,56 +28,58 @@ setup m window = do
 
     drawBoard m m canvas
 
-    mineMode   <- UI.button #+ [string "Dig Mine"]
-    flagMode   <- UI.button #+ [string "Plant Flag"]
-    unsureMode <- UI.button #+ [string "Mark Unsure"]
-    compMove   <- UI.button #+ [string "Make AI move"]
-    reset      <- UI.button #+ [string "New Game"]
+    digButton    <- UI.button #+ [string "Dig Mine"]
+    flagButton   <- UI.button #+ [string "Plant Flag"]
+    unsureButton <- UI.button #+ [string "Mark Unsure"]
+    compMove     <- UI.button #+ [string "Make AI move"]
 
     getBody window #+
-        [ column [element canvas]
-        , element mineMode
-        , element flagMode
-        , element unsureMode
+        [ element $ UI.h1 #+ [string "Minesweeper"]
+        , column [element canvas]
+        , element digButton
+        , element flagButton
+        , element unsureButton
         , element compMove
-        , element reset
         ]
 
     let 
         mineEvent :: Event (Modes -> Modes)
-        mineEvent = const Mine <$ UI.click mineMode
+        mineEvent = const Mine <$ UI.click digButton
 
         flagEvent :: Event (Modes -> Modes)
-        flagEvent = const Flag <$ UI.click flagMode
+        flagEvent = const Flag <$ UI.click flagButton
 
         unsureEvent :: Event (Modes -> Modes)
-        unsureEvent = const Unsure <$ UI.click unsureMode
+        unsureEvent = const Unsure <$ UI.click unsureButton
 
         modeEvent :: Event (Modes -> Modes)
         modeEvent = unionWith const mineEvent (unionWith const flagEvent unsureEvent)
 
-        digMine :: Event (Minefield -> Minefield)
-        digMine tile = flip $ uncoverTile tile
+        -- Converts mousePos to the index of the tile clicked
+        coord :: Event (Int, Int)
+        coord = getMinePos <$> UI.mousedown canvas
 
+    -- makeMove :: Behavior (Modes -> (Int, Int) -> Minefield -> Minefield)
+    --   Allows for Event (Minefield -> Minefield) to depend on coords and mode
+    makeMove <- let
+        init = \mode -> case mode of
+            Mine   -> flip uncoverTile
+            Flag   -> flip flagTile
+            Unsure -> flip potentialTile
+        next = init <$ UI.click canvas
+        in stepper init next
+
+    -- diggingMode :: Behavior (Modes)
     diggingMode <- accumB Mine modeEvent
-    mousePos <- stepper (0, 0) $ UI.mousemove canvas
-    minefield <- accumB m digMine tile
-        where tile = getTile <$> getMinePos <$> mousePos
+    -- Applying coord event and digging behavior to makeMove
+    minefield <- accumB m ((makeMove <*> diggingMode) <@> coord)
 
-    let 
-        bst :: Behavior (Modes, (Int, Int))
-        bst = (,) <$> diggingMode <*> ( getMinePos <$> mousePos)
-
-        board :: Behaviour (Minefield)
-        board = (,) <$> 
-
-        move :: Event (Modes, (Int, Int))
-        move = bst <@ UI.click canvas
+    let
+        move :: Event (Minefield)
+        move = minefield <@ UI.click canvas
     
     onEvent move $ \e -> do playerMove e canvas
-
-    on UI.click reset $ const $
-        canvas # UI.clearCanvas
+    return ()
 
 -- Get mine index based on mouse click
 getMinePos :: (Int, Int) -> (Int, Int)
@@ -98,57 +100,52 @@ getTilePos (x, y) =
         b = (fromIntegral y :: Double) / h * c
     in (a, b)
 
-playerMove :: (Modes, (Int, Int)) -> Element -> UI ()
-playerMove (m, pos) canvas = do
-    canvas # set' UI.lineWidth 2.0
-    canvas # set' UI.strokeStyle "black"
 
-    let colour = case m of
-        Mine -> "DarkKhaki"
-        _    -> "LightGoldenrodYellow"
+playerMove :: Minefield -> Element -> UI ()
+playerMove m canvas = do
+    drawBoard m m canvas
+    if (gameLost m) 
+        then gameOverMessage canvas 
+        else if (gameWon m) 
+            then gameWonMessage canvas 
+            else return ()
 
-    canvas # set' UI.fillStyle (UI.htmlColor "DarkKhaki")
-    canvas # UI.fillRect (getTilePos pos) 25 25
+gameOverMessage :: Element -> UI ()
+gameOverMessage canvas = return ()
+
+gameWonMessage :: Element -> UI ()
+gameWonMessage canvas = return ()
+
 
 drawBoard :: Minefield -> [[Tile]] -> Element -> UI ()
-drawBoard _ [] canvas = do canvas # set' UI.strokeStyle "black"
+drawBoard _ [] canvas = return ()
 drawBoard m (r:rs) canvas = do
     canvas # set' UI.lineWidth 2.0
+    canvas # set' UI.textFont "14px sans-serif"
+    canvas # set' UI.textAlign UI.Center
     drawRow m r canvas
     drawBoard m rs canvas
 
 drawRow :: Minefield -> [Tile] -> Element -> UI ()
-drawRow m [] canvas = do canvas # set' UI.strokeStyle "black"
+drawRow m [] canvas = return ()
 drawRow m (t:ts) canvas = do
     let colour = getTileColour (status t)
+        rectPos = getTilePos $ coords t
+        textPos = let (a, b) = rectPos
+                  in (a+12.5, b+14)
+
     canvas # set' UI.fillStyle (UI.htmlColor colour)
-    canvas # set' UI.text (displayTile m t)
-    canvas # UI.fillRect (getTilePos $ coords t) 25 25
+    canvas # UI.fillRect rectPos 25 25
+    canvas # set' UI.fillStyle (UI.htmlColor "black")
+
+    case status t of
+        Visible   -> canvas # UI.fillText (displayTile m t) textPos
+        Flagged   -> canvas # UI.fillText "!" textPos
+        Potential -> canvas # UI.fillText "?" textPos
+        _         -> return ()
+
     drawRow m ts canvas
 
 getTileColour :: Status -> String
 getTileColour Visible = "LightGoldenrodYellow"
 getTileColour _       = "DarkKhaki"
-
--- startGame :: IO ()
--- startGame = do
---     m <- makeMinefield mHeight mWidth
---     makeMove m
-
--- makeMove :: Minefield -> IO ()
--- makeMove m = do
---     print m
---     putStrLn "Enter Row: "
---     in1 <- getLine
---     putStrLn "Enter Column: "
---     in2 <- getLine
---     let move = (read in1, read in2)
---         tile = tileAt m move
---         m' = uncoverTile m tile
---         lost = gameLost m'
---         won = gameWon m'
---     if not (lost || won)
---         then makeMove m'
---         else do
---             putStrLn "Game has ended."
---             print m'
