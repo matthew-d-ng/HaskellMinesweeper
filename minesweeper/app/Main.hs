@@ -6,6 +6,7 @@ import Graphics.UI.Threepenny.Core
 import Reactive.Threepenny
 
 import Mines
+import Solver
 
 mHeight = 20
 mWidth = 20
@@ -15,31 +16,33 @@ data Modes = Mine | Flag | Unsure deriving Show
 
 main :: IO ()
 main = do
-    m <- makeMinefield mHeight mWidth
-    startGUI defaultConfig (setup m)
+    -- m <- makeMinefield mHeight mWidth
+    startGUI defaultConfig setup
 
-setup :: Minefield -> Window -> UI ()
-setup m window = do
-    return window # set title "Balkan Simulator"
+setup :: Window -> UI ()
+setup window = do
+    return window # set title "minesweeper"
     canvas <- UI.canvas
         # set UI.height canvasSize
         # set UI.width canvasSize
         # set UI.style [("border", "solid black 1px"), ("background", "#eee")]
 
+    m <- liftIO $ makeMinefield mHeight mWidth
     drawBoard m m canvas
 
-    digButton    <- UI.button #+ [string "Dig Mine"]
+    header       <- UI.h1     #+ [string "Minesweeper"]
+    digButton    <- UI.button #+ [string "Dig Square"]
     flagButton   <- UI.button #+ [string "Plant Flag"]
     unsureButton <- UI.button #+ [string "Mark Unsure"]
-    compMove     <- UI.button #+ [string "Make AI move"]
+    compButton   <- UI.button #+ [string "Make AI move"]
 
     getBody window #+
-        [ element $ UI.h1 #+ [string "Minesweeper"]
-        , column [element canvas]
+        [ column [element canvas]
+        , element header
         , element digButton
         , element flagButton
         , element unsureButton
-        , element compMove
+        , element compButton
         ]
 
     let 
@@ -71,12 +74,22 @@ setup m window = do
 
     -- diggingMode :: Behavior (Modes)
     diggingMode <- accumB Mine modeEvent
-    -- Applying coord event and digging behavior to makeMove
-    minefield <- accumB m ((makeMove <*> diggingMode) <@> coord)
+
+    let
+        anyMove :: Event (Minefield -> Minefield)
+        anyMove = -- Applying coord event and digging behavior to makeMove
+            let player   = (makeMove <*> diggingMode) <@> coord
+                computer = computerMove <$ UI.click compButton
+            in unionWith const player computer
+
+    minefield <- accumB m anyMove
 
     let
         move :: Event (Minefield)
-        move = minefield <@ UI.click canvas
+        move = 
+            let canvasClick = UI.click canvas
+                compClick   = UI.click compButton
+            in minefield <@ unionWith const canvasClick compClick
     
     onEvent move $ \e -> do playerMove e canvas
     return ()
@@ -111,10 +124,10 @@ playerMove m canvas = do
             else return ()
 
 gameOverMessage :: Element -> UI ()
-gameOverMessage canvas = return ()
+gameOverMessage canvas = return () -- TODO
 
 gameWonMessage :: Element -> UI ()
-gameWonMessage canvas = return ()
+gameWonMessage canvas = return () -- TODO
 
 
 drawBoard :: Minefield -> [[Tile]] -> Element -> UI ()

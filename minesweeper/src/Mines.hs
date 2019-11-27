@@ -13,7 +13,10 @@ module Mines
     , flagTile
     , potentialTile
     , tileAt
-    , setAllVisible -- debugging only
+    -- , setAllVisible -- debugging only
+    , isBeside
+    , isVisible
+    , isFlagged
     ) where
 
 import System.Random
@@ -23,13 +26,13 @@ import Data.List
 type Coords = (Int, Int)
 type Minefield = [[Tile]]
 
-data Status = Visible | Unknown | Flagged | Potential deriving Eq
-data Square = Mine | Empty deriving Eq
+data Status = Visible | Unknown | Flagged | Potential deriving (Eq, Show)
+data Square = Mine | Empty deriving (Eq, Show)
 data Tile = Tile 
     { status :: Status
     , square :: Square
     , coords :: Coords
-    } deriving Eq
+    } deriving (Eq, Show)
 
 
 -- GAME SETTINGS
@@ -126,19 +129,16 @@ addMine m coord =
 -- GAME RULES
 -- Game is won if all tiles without mines are visible
 gameWon :: Minefield -> Bool
-gameWon m = all rowDone m
+gameWon m = 
+    let hiddenEmpties = filter hiddenEmpty (concat m)
+    in length hiddenEmpties == 0
 
-rowDone :: [Tile] -> Bool
-rowDone row = 
-    let x = filter (\t -> not $ (isVisible t) || (isMine t)) row
-    in length x == 0
+hiddenEmpty :: Tile -> Bool
+hiddenEmpty t = not $ (isVisible t) || (isMine t)
 
 -- We've lost if we step on a mine
 gameLost :: Minefield -> Bool
-gameLost m = any rowLost m
-
-rowLost :: [Tile] -> Bool
-rowLost row = any tileLost row
+gameLost m = any tileLost (concat m)
 
 tileLost :: Tile -> Bool
 tileLost t = (isVisible t) && (isMine t)
@@ -211,25 +211,24 @@ inRange m (i, j) =
     let len = length m 
     in i >= 0 && i < len && j >= 0 && j < len
 
+-- safe version
 --tileAt :: Minefield -> Coords -> Maybe Tile
 --tileAt m (i, j)
 --    | inRange m (i, j) = Just $ m !! i !! j
 --    | otherwise        = Nothing
 
--- Unsafe
+-- Unsafe but it means less work
 tileAt :: Minefield -> Coords -> Tile
 tileAt m (i, j) = m !! i !! j
 
 adjacents :: Minefield -> Tile -> [Tile]
-adjacents [] _     = []
-adjacents (m:ms) t = (filter (isBeside t) m) ++ (adjacents ms t)
+adjacents m t = filter (isBeside t) (concat m)
 
 adjacentMines :: Minefield -> Tile -> Int
-adjacentMines m t = length $ filter (isBeside t)(mines m)
+adjacentMines m t = length $ filter (isBeside t) (mines m)
 
 mines :: Minefield -> [Tile]
-mines []     = []
-mines (m:ms) = (filter isMine m) ++ (mines ms)
+mines m = filter isMine (concat m)
 
 isBeside :: Tile -> Tile -> Bool
 isBeside t1 t2 = 
@@ -241,6 +240,10 @@ isBeside t1 t2 =
 isVisible :: Tile -> Bool
 isVisible Tile{status = Visible} = True
 isVisible _                      = False
+
+isFlagged :: Tile -> Bool
+isFlagged Tile{status = Flagged} = True
+isFlagged _                      = False
 
 isMine :: Tile -> Bool
 isMine Tile{square = Mine} = True
