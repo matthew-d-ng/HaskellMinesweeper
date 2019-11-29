@@ -10,8 +10,11 @@ Implements the base features of the game minesweeper.
 A minefield is represented as a 2D list of Tiles. It would have been sufficient to place all tiles into a simple 1D list. However, the 2D list eases indexing and makes sense when visualising the board as a grid.
 
 Tile {status :: Status, square :: Square, coords :: Coords}
+
 Coords :: (Int, Int)
+
 Status = Visible | Unknown | Flagged | Potential
+
 Square = Mine | Empty
 
 ### makeMinefield :: Int -> Int -> IO Minefield
