@@ -8,16 +8,14 @@ import Reactive.Threepenny
 import Mines
 import Solver
 
-mHeight = 20
-mWidth = 20
-canvasSize = 25 * mWidth
+mHeight = 20    :: Int
+mWidth = 20     :: Int
+canvasSize = 25 * mWidth :: Int
 
 data Modes = Mine | Flag | Unsure deriving Show
 
 main :: IO ()
-main = do
-    -- m <- makeMinefield mHeight mWidth
-    startGUI defaultConfig setup
+main = startGUI defaultConfig setup
 
 setup :: Window -> UI ()
 setup window = do
@@ -84,14 +82,8 @@ setup window = do
 
     minefield <- accumB m anyMove
 
-    let
-        move :: Event (Minefield)
-        move = 
-            let canvasClick = UI.click canvas
-                compClick   = UI.click compButton
-            in minefield <@ unionWith const canvasClick compClick
-    
-    onEvent move $ \e -> do playerMove e canvas
+    liftIO $ onChange minefield $ 
+        \e -> do runUI window (playerMove window e canvas)
     return ()
 
 -- Get mine index based on mouse click
@@ -100,8 +92,8 @@ getMinePos (x, y) =
     let c = fromIntegral canvasSize :: Float
         w = fromIntegral mWidth     :: Float
         h = fromIntegral mHeight    :: Float
-        a = floor $ (fromIntegral x :: Float) / c * w
-        b = floor $ (fromIntegral y :: Float) / c * h
+        b = floor $ (fromIntegral x :: Float) / c * w
+        a = floor $ (fromIntegral y :: Float) / c * h
     in (a, b)
 
 getTilePos :: (Int, Int) -> (Double, Double)
@@ -109,31 +101,56 @@ getTilePos (x, y) =
     let c = fromIntegral canvasSize :: Double
         w = fromIntegral mWidth     :: Double
         h = fromIntegral mHeight    :: Double
-        a = (fromIntegral x :: Double) / w * c
-        b = (fromIntegral y :: Double) / h * c
+        b = (fromIntegral x :: Double) / w * c
+        a = (fromIntegral y :: Double) / h * c
     in (a, b)
 
 
-playerMove :: Minefield -> Element -> UI ()
-playerMove m canvas = do
+playerMove :: Window -> Minefield -> Element -> UI ()
+playerMove w m canvas = do
     drawBoard m m canvas
     if (gameLost m) 
-        then gameOverMessage canvas 
+        then gameOverMessage w 
         else if (gameWon m) 
-            then gameWonMessage canvas 
+            then gameWonMessage w 
             else return ()
 
-gameOverMessage :: Element -> UI ()
-gameOverMessage canvas = return () -- TODO
+gameOverMessage :: Window -> UI ()
+gameOverMessage w = do
+    loseMessage <- UI.h1 #+ [string "Game Lost! You hit a mine!"]
+    getBody w #+ [element loseMessage]
+    return ()
 
-gameWonMessage :: Element -> UI ()
-gameWonMessage canvas = return () -- TODO
+gameWonMessage :: Window -> UI ()
+gameWonMessage w = do
+    winMessage <- UI.h1 #+ [string "Game complete! All safe squares uncovered!"]
+    getBody w #+ [element winMessage]
+    return ()
 
+drawGridLines :: Element -> UI ()
+drawGridLines canvas = do
+    let max       = fromIntegral canvasSize
+        ranges    = [0, 25..max]
+        top       = zip (repeat 0) ranges
+        bottom    = zip (repeat max) ranges
+        left      = zip ranges (repeat 0)
+        right     = zip ranges (repeat max)
+    mapM_ (drawLine canvas) (zip top bottom)
+    mapM_ (drawLine canvas) (zip left right)
+
+drawLine :: Element -> (UI.Point, UI.Point) -> UI ()
+drawLine canvas (a, b) = do
+    UI.beginPath canvas
+    UI.moveTo a canvas
+    UI.lineTo b canvas
+    UI.closePath canvas
+    UI.stroke canvas
 
 drawBoard :: Minefield -> [[Tile]] -> Element -> UI ()
-drawBoard _ [] canvas = return ()
+drawBoard _ [] canvas = drawGridLines canvas
 drawBoard m (r:rs) canvas = do
-    canvas # set' UI.lineWidth 2.0
+    canvas # set' UI.lineWidth 1.0
+    canvas # set' UI.strokeStyle "gray"
     canvas # set' UI.textFont "14px sans-serif"
     canvas # set' UI.textAlign UI.Center
     drawRow m r canvas

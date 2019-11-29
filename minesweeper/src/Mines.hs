@@ -38,14 +38,7 @@ data Tile = Tile
 -- GAME SETTINGS
 mHeight = 20
 mWidth = 20
-numMines = 50
-
--- DEBUGGING UTILS
-testMines = [
-    (0, 1), (4, 6), (8, 2), (9, 8), (2, 4), 
-    (6, 6), (1, 3), (9, 9), (7, 0), (2, 2),
-    (1, 2), (4, 2), (9, 0), (6, 1), (8, 4)
-    ]
+numMines = 75
 
 -- Make every tile visible
 setAllVisible :: Minefield -> Minefield
@@ -59,6 +52,9 @@ setTilesVisible m (t:ts) = setTilesVisible (revealTile m t) ts
 instance {-# OVERLAPS #-} Show Minefield where
     show = displayMinefield
 
+-- displayMinefield, displayGrid and displayRow are not necessary in final
+-- implementation but were useful for initial testing. 
+-- However, displayTile is used.
 displayMinefield :: Minefield -> String
 displayMinefield m = displayGrid m m
 
@@ -81,7 +77,7 @@ displayTile :: Minefield -> Tile -> String
 displayTile m t = case square t of
     Mine  -> " X "
     Empty -> case adjacentMines m t of
-        0 -> " - "
+        0 -> "   "
         n -> " " ++ [intToDigit n] ++ " "
 
 
